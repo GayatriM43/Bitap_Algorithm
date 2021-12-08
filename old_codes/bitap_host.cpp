@@ -2,12 +2,13 @@
 #include <algorithm>
 #include <cstring>
 #include <iostream>
-#include <string>
+#include <string.h>
 #include <thread>
 #include <unistd.h>
 #include <vector>
 #include <iomanip>
 #include <chrono>
+#include <bits/stdc++.h>
 // This extension file is required for stream APIs
 //#include "CL/cl_ext_xilinx.h"
 // This file is required for OpenCL C++ wrapper APIs
@@ -25,7 +26,7 @@ unsigned long long *generatePatternBitmasksACGT(char* pattern, int m)
     int count = ceil(m/64.0);
         
     int len = 4*count; // A,C,G,T
-        
+    std:: cout << "length is" <<len << "\n";    
     unsigned long long *patternBitmasks = (unsigned long long *) malloc(len * sizeof(unsigned long long));
         
     unsigned long long max = ULLONG_MAX;
@@ -65,7 +66,7 @@ unsigned long long *generatePatternBitmasksACGT(char* pattern, int m)
 
 int genasmDC(char *text, char *pattern, int k)
 {
-    EventTimer et;
+    //EventTimer et;
     int m = strlen(pattern);
     int n = strlen(text);
     
@@ -80,7 +81,7 @@ int genasmDC(char *text, char *pattern, int k)
     // Initialize the bit arrays R
     int len1 = (k+1) * count;
     unsigned long long R[len1];
-    
+    std :: cout << len1 << "\n";
     for (int i=0; i < len1; i++)
     {
        R[i] = max;  
@@ -274,10 +275,11 @@ int main(int argc, char * argv[])
     cl::CommandQueue q = xocl.get_command_queue();
     cl::Kernel krnl = xocl.get_kernel(KRNL_NAME);
     et.finish();
-
+    char *pattern = argv[1];
+    char *text = argv[2];
     int m = strlen(pattern);
     int n = strlen(text);
-    
+    std :: cout << m << n << "\n";
     unsigned long long max = ULLONG_MAX;
 
     int count = ceil(m/64.0);
@@ -286,6 +288,11 @@ int main(int argc, char * argv[])
     //Initialise pattern bitmasks
     std::cout << "Generating Pattern bit masks\n";
     unsigned long long *patternBitmasks = generatePatternBitmasksACGT(pattern, m);
+
+    //for (int i=0;i<=len(patternBitmasks);i++)
+    //std::cout << patternBitmasks[1] << "\n";
+
+    //  std::cout << genasmDC(pattern,text,2);
     
     //send pattern bit masks to kernel and bind them 
     et.add("Map pm buffer");
@@ -332,7 +339,39 @@ int main(int argc, char * argv[])
                                                      CL_MAP_WRITE_INVALIDATE_REGION,
                                                      0,
                                                      n*sizeof(char));
-                                                     
+
+    std::cout << "CPU result"  << "\n";
+    int out_put = genasm_filter;
+    std::  cout << out_put << "\n";
+
+     // Send the buffers down to the  card
+    et.add("Memory object migration enqueue");
+    cl::Event event_sp;
+    q.enqueueMigrateMemObjects({buffer_pm, buffer_pattern, buffer_text}, 0, NULL, &event_sp);
+    clWaitForEvents(1, (const cl_event *)&event_sp);
+
+    et.add("OCL Enqueue task");
+
+    q.enqueueTask(krnl, NULL, &event_sp);
+    et.add("Wait for kernel to complete");
+    clWaitForEvents(1, (const cl_event *)&event_sp);
+
+    // Migrate memory back from device
+    et.add("Read back computation results");
+    int *c = (int *)q.enqueueMapBuffer(buffer_out,
+                                                 CL_TRUE,
+                                                 CL_MAP_READ,
+                                                 0,
+                                                sizeof(int));
+
+    if (c[0]!=out_put)
+    std::cout << "cpu result" << out_put << " donot match with fpga result" << c[0] << "\n";
+    else
+    std:: cout << "sucess, edit distance is" << c[0];
+    et.finish();
+
+
+                                  
     
     return 0;
 }
