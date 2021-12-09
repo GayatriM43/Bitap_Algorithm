@@ -1,3 +1,4 @@
+
 #include <algorithm>
 #include <cstring>
 #include <iostream>
@@ -24,13 +25,20 @@
 #include <iostream>
 
 //# define KRNL_NAME wide_vadd
+int min(int a, int b)
+{
+	if(a<b)
+		return a ;
+	return b;
+}
+
 
 unsigned long long *generatePatternBitmasksACGT(char* pattern, int m)
 {
     int count = ceil(m/64.0);
         
     int len = 4*count; // A,C,G,T
-    std:: cout << "length is" <<len << "\n";    
+    //std:: cout << "length is" <<len << "\n";
     unsigned long long *patternBitmasks = (unsigned long long *) malloc(len * sizeof(unsigned long long));
         
     unsigned long long max = ULLONG_MAX;
@@ -78,16 +86,16 @@ int genasmDC(char *text, char *pattern, int k)
 
     int count = ceil(m/64.0);
     //Initialise pattern bitmasks
-    std::cout << "Generating Pattern bit masks\n";
+    //std::cout << "Generating Pattern bit masks\n";
     unsigned long long *patternBitmasks = generatePatternBitmasksACGT(pattern, m);
     //send pattern bit masks to kernel and bind them 
-    std::cout << "entered DC\n";
+    //std::cout << "entered DC\n";
     // Initialize the bit arrays R
-    std :: cout  << "k is" << k << "count" <<count << "\n";
+    //std :: cout  << "k is" << k << "count" <<count << "\n";
     int len1 = (k+1) * count;
-    std::cout << "length in DC before R: "<< len1 << "\n";
+    //std::cout << "length in DC before R: "<< len1 << "\n";
     unsigned long long R[len1];
-   std::cout << "length in DC : "<< len1 << "\n";
+   //std::cout << "length in DC : "<< len1 << "\n";
     for (int i=0; i < len1; i++)
     {
        R[i] = max;  
@@ -130,7 +138,7 @@ int genasmDC(char *text, char *pattern, int k)
     {
         max1 = 1ULL << (rem-1);
     }
-
+    int minError = INT_MAX;
     for (int i=n-1; i >= 0; i--)
     {
         char c = text[i];
@@ -229,22 +237,21 @@ int genasmDC(char *text, char *pattern, int k)
                 }
             }
         }
-    }
     
-    int minError = -1;
+
+
     unsigned long long mask = max1;
     
     for (int t=0; t <= k; t++)
     {
         if ((R[t*count] & mask) == 0)
         {
-            minError = t;
-            break;
+            minError = min(minError,t);
         }
-    }
+    }}
 
     //free(patternBitmasks);
-    std::cout << "DC return value" << minError;
+    //std::cout << "DC return value" << minError;
     //fprintf(stdout, "%d\n", minError);
 
     return minError;
@@ -253,18 +260,9 @@ int genasmDC(char *text, char *pattern, int k)
 
 int genasm_filter(char *text, char *pattern, int k)
 {
-	std::cout << "entered filter"<<"\n";
+	//std::cout << "entered filter"<<"\n";
     int minError = genasmDC(text, pattern, k);
-    if (minError == -1)
-    {
-        std::cout << 0 << "\n";
-        return 0;
-    }
-    else
-    {
-       std::cout << "ANS"<<minError << "\n";
-        return 1;
-    }
+    return minError;
 }
 
 int main(int argc, char * argv[])
@@ -286,12 +284,12 @@ int main(int argc, char * argv[])
     
     int m = strlen(argv[2]);
     int n = strlen(argv[3]);
-    std::cout << m << n << "\n";
+    std::cout << "length of pattern is "<< m << "length of text is "<< n << "\n";
     unsigned long long max = ULLONG_MAX;
 
     int count = ceil(m/64.0);
     int len = 4*count;
-    int BUF_SIZE=4;
+
   
 
     //for (int i=0;i<=len(patternBitmasks);i++)
@@ -380,8 +378,10 @@ int main(int argc, char * argv[])
                                                         CL_MAP_WRITE_INVALIDATE_REGION,
                                                         0,
                                                         sizeof(int));
+    et.finish();
    //Initialise pattern bitmasks
-    std::cout << "Generating Pattern bit masks\n";
+   //std::cout << "Generating Pattern bit masks\n";
+    et.add("generating pattern bitmasks");
     unsigned long long *patternmask = generatePatternBitmasksACGT(argv[2], m);
 //    patternBitmasks[0]=patternBitmask[0];
 //    patternBitmasks[1]=patternBitmask[1];
@@ -391,29 +391,31 @@ int main(int argc, char * argv[])
     {
     	patternBitmasks[i]=patternmask[i];
     }
-    std::cout << patternBitmasks[0]<<"\n";
+    //std::cout << patternBitmasks[0]<<"\n";
+    et.finish();
     char *pat=argv[2];
     char *tex=argv[3];
-    std::cout << "text in host"<< *tex << "\n";
+    //std::cout << "text in host"<< *tex << "\n";
     for (int i=0;i<m;i++)
     	pattern[i]=pat[i];
 
     for (int j=0;j<n;j++)
     {    text[j]= tex[j];
-    	std:: cout << text[j] <<tex[j] <<"\n";}
+     }
     k[0]=std::stoi(argv[4]);
     m1[0]=m;
     n1[0]=n;
-    std :: cout << "offset" << k[0] ;
+    //std :: cout << "offset" << k[0] ;
 	int out_put=0;
+	et.add("cpu time");
     std::cout << "CPU result"  << "\n";
     out_put = genasm_filter(text,pat,k[0]);
-    std::  cout << out_put << "\n";
-
+    //std::  cout << out_put << "\n";
+    et.finish();
      // Send the buffers down to the  card
     et.add("Memory object migration enqueue");
     cl::Event event_sp;
-    q.enqueueMigrateMemObjects({buffer_pm, buffer_pattern, buffer_text,buffer_k}, 0, NULL, &event_sp);
+    q.enqueueMigrateMemObjects({buffer_pm, buffer_pattern, buffer_text,buffer_k, buffer_m, buffer_n}, 0, NULL, &event_sp);
     clWaitForEvents(1, (const cl_event *)&event_sp);
 
     et.add("OCL Enqueue task");
@@ -432,8 +434,10 @@ int main(int argc, char * argv[])
 
     if (c[0]!=out_put)
     std::cout << "cpu result" << out_put << " donot match with fpga result" << c[0] << "\n";
+    else if (c[0]==-2)
+	std::cout << "length exceeded\n";
     else
-    std:: cout << "sucess, edit distance is" << c[0];
+    std:: cout << "success, edit distance is" << c[0];
     et.finish();
 
 

@@ -44,10 +44,10 @@ return 0;
 
 unsigned long long* shift(unsigned long long number0,unsigned long long number1)
 {
-	std::cout << "Entered shift\n";
+	//std::cout << "Entered shift\n";
 unsigned long long* out;
 int msb_rightpart=findmsb(number1,63);
-std::cout << "msb" << msb_rightpart << "\n";
+//std::cout << "msb" << msb_rightpart << "\n";
 out[1]=number1<<1;
 out[0]=number0<<1;
 out[0]+=msb_rightpart;
@@ -110,7 +110,7 @@ extern "C"
 #pragma HLS BIND_STORAGE variable= tex type=RAM_2P impl=BRAM latency=2
 #pragma HLS BIND_STORAGE variable=patt_len type=RAM_2P impl=BRAM latency=2
 #pragma HLS BIND_STORAGE variable =text_len type=RAM_2P impl=BRAM latency=2
-std:: cout << "----------------------kernel side--------------------"<<"\n";
+//std:: cout << "----------------------kernel side--------------------"<<"\n";
    patt_len=m[0];
    text_len=n[0];
    int num= ceil(m[0]/(64*1.0));
@@ -136,7 +136,7 @@ F[0]= ULLONG_MAX;
 F[1]=ULLONG_MAX;
 F[0]=shift(F[0],F[1])[0];
 F[1]=shift(F[0],F[1])[1];
-std::cout <<"Check shift   "<< F[0] << "  " << F[1] << "\n";
+//std::cout <<"Check shift   "<< F[0] << "  " << F[1] << "\n";
  uint64_t R[110][25];
 
 #pragma HLS BIND_OP variable=R op=mul impl=DSP latency=2
@@ -238,7 +238,7 @@ std::cout <<"Check shift   "<< F[0] << "  " << F[1] << "\n";
 		  //how do you get for generalised ? , please see cpu for limits and do
 		  uint64_t currpm[2];
           int ind= i*2;
-          std:: cout <<"text char"<< tex[text_len-j+i] << "\n";
+          //std:: cout <<"text char"<< tex[text_len-j+i] << "\n";
 		  if(tex[text_len-j+i]=='A' or tex[text_len-j+i]=='a')
 		  {
 			  currpm[0]=patternbitmasks[0];
@@ -329,21 +329,42 @@ std::cout <<"Check shift   "<< F[0] << "  " << F[1] << "\n";
   }
   else
   {
-	  std :: cout << "Not supported since value of num is " << val << "\n";
+	 out[0]=-2;
   }
 
 
-  std::  cout << "Edit distance calculation started\n";
+  //std::  cout << "Edit distance calculation started\n";
   //using old method
-  int minerror=0;
-//  for (int j=text_len-1;j>=0;j--)
-//	  for (int i=0;i<=offset;i++)
-//	  {
-//		  if (msb(R[j][i])==0)
-//		  {  minerror=i;
-//		     break;
-//		  }
-//
-//	  }
+  int minerror=INT_MAX;
+  if (val==1)
+  {
+  for (int j=text_len-1;j>=0;j--)
+	  for (int i=0;i<=offset;i++)
+	  {
+		  if (findmsb(R[j][i],patt_len-1)==0)
+		  {
+			  minerror=min(minerror,i);
+			  //std::cout <<minerror << "\n";
+		     break;
+		  }
+
+	  }}
+  else if (val==2)
+  {
+	  for (int j=text_len-1;j>=0;j--)
+	  	  for (int i=0;i<=offset;i++)
+	  	  {
+
+	  		  int ind = i*2;
+	  		  if (findmsb(R[j][ind],(patt_len-1)%64)==0)
+	  		  {
+	  			  minerror=min(minerror,i);
+	  			  //std::cout <<minerror << "\n";
+	  		     break;
+	  		  }
+	  	  }
+  }
+  if(minerror==INT_MAX)
+	  minerror=-1;
  out[0]=minerror;
   }}
