@@ -17,18 +17,43 @@ const unsigned int c_chunk_sz = BUFFER_SIZE;
 const unsigned int c_size     = VECTOR_SIZE;
 
 /*
-    Vector Addition Kernel Implementation using uint512_dt datatype
-    Arguments:
-        in1   (input)     --> Input Vector1
-        in2   (input)     --> Input Vector2
-        out   (output)    --> Output Vector
-        size  (input)     --> Size of Vector in Integer
+    Bitap kernel implementation
+        
+        pm (input)          ---> patternbitmasks of pattern
+        pattern   (input)     --> query string
+        text   (input)     --> text string
+        k   (input)     --> offset value
+        m  (input)       -- > pattern length
+        n (input)       ---> text length
+        out   (output)    --> Output integer, edit distance
+         
    */
+  //for shifting two numbers , ie first bit of ind1 should be last bit of ind0
+unsigned long long* shift(unsigned long long number0,unsigned long long number1)
+{
+unsigned long long* out;
+int msb_rightpart=findmsb(number1,63);
+out[1]=number1<<1;
+out[0]=number0<<1+msb_rightpart;
+return out;
+}
+int findmsb(unsigned long long number,int shiftsize)
+{
+unsigned long long mask=1<<shiftsize;
+if(mask&number==0)
+{
+return 1;
+}
+else{
+return 0;
+}
+}
+
 extern "C"
 {
     void wide_vadd(
-        unsigned long long  *pm, // Read-Only Vector 1
-        const char *pattern, // Read-Only Vector 2
+        unsigned long long  *pm, 
+        const char *pattern, 
         const char *text,
 		int *k,
 		const int *m,
@@ -91,6 +116,7 @@ extern "C"
  uint64_t R[110][25];
 #pragma HLS BIND_OP variable=R op=mul impl=DSP latency=2
 #pragma  HLS BIND_STORAGE variable=P type=RAM_2P impl=BRAM latency=2
+//bind needs specific value hence specified upper bounds.
   if (num==1)
   {
   for (int j=0;j<k+text_len;j++)
@@ -146,6 +172,7 @@ extern "C"
 				   sub=R[text_len-j+i+1][i-1] << 1;
 				   match=R[text_len-j+i+1][i] << 1;
 				   match |=currpm;
+                   R[text_len-j+i][i]=del & ins & sub & match;
 
 			  }
 			  else
@@ -155,6 +182,7 @@ extern "C"
 				  sub=oldR[0]<<1;
 				  match=oldR[0]<<1;
 				  match|=currpm;
+                  R[text_len-j+i][i]=del & ins & sub & match;
 			  }
 			  }
 
@@ -162,12 +190,103 @@ extern "C"
   }
   else if (num==2)
   {
+      for (int j=0;j<k+text_len;j++)
+	  for (int i=min(j,k) ;i>=0;i--)
+	  {
+#pragma HLS loop unroll
+//compute R[n-j+1][i]
+		  //get current pattern bit mask
+		  //how do you get for generalised ? , please see cpu for limits and do
+		  uint64_t currpm[2];
+          int ind= i*2;
+		  if(tex[text_len-j+i]=='A' or tex[text_len-j+i]=='a')
+		  {
+			  currpm[0]=patternbitmasks[0];
+              currpm[1]=patternbitmasks[1];
+		  }
+		  else if(tex[text_len-j+i]=='C' or tex[text_len-j+i]=='c')
+		  {
+		  	  currpm[0]=patternbitmasks[2];
+              currpm[1]=patternbitmasks[3];
+		  }
+		  else if(tex[text_len-j+i]=='G' or tex[text_len-j+i]=='g')
+		  {
+			  currpm[0]=patternbitmasks[4];
+              currpm[1]=patternbitmasks[5];
+		  }
+		  else if(tex[text_len-j+i]=='T' or tex[text_len-j+i]=='t')
+		  {
+		 	 currpm[0]=patternbitmasks[6];
+             currpm[1]=patternbitmasks[7];
+		  }
+			  //code to get curr_pr
+		  if(i==0)
+		  {
+			  //compute single R with range
+			  if((text_len-j+i)==text_len-1)
+			  {	  R[text_len-j+i][0]= shift(oldR[0],oldR[1])[0];
+			      R[text_len+j+i][0]|=currpm[0];
+                  R[text_len-j+i][1]= shift(oldR[0],oldR[1])[1];
+			      R[text_len+j+i][1]|=currpm[1];
+			  }
+			  else
+			  {
+				  R[text_len-j+i][0]= shift(R[text_len-j+i+1][0],R[text_len-j+1+i][1])[0];
+				  R[text_len-j+i][0]|=currpm[0];
+                  R[text_len-j+i][1]= shift(R[text_len-j+i+1][0],R[text_len-j+1+i][1])[1];
+				  R[text_len-j+i][1]|=currpm[1];
+			  }
 
+		  }
+		  else
+		  {
+			  //compute all 4 (in parallel by default) and And it
+			  uint64_t sub[2];
+			  uint64_t ins[2];
+			  uint64_t match[2];
+			  uint64_t del[2];
+			  if (j-i!=1)
+			  {
+				   del[0]=R[text-j+i+1][ind-2];
+                   del[1]=R[text-j+i+1][ind-1];
+				   ins[0]=shift(R[text_len-j+i][ind-2],R[text_len-j+i][ind-1])[0]; //cross dependency from prev level in graph
+                   ins[1]=shift(R[text_len-j+i][ind-2],R[text_len-j+i][ind-1])[1];
+				   sub[0]=shift(R[text_len-j+i+1][ind-2],R[text_len-j+i+1][ind-1])[0];
+                   sub[1]=shift(R[text_len-j+i+1][ind-2],R[text_len-j+i+1][ind-1])[1];
+				   match[0]=shift(R[text_len-j+i+1][ind],R[text_len-j+i+1][ind+1])[0];
+				   match[0] |=currpm[0];
+                   match[1]=shift(R[text_len-j+i+1][ind],R[text_len-j+i+1][ind+1])[1];
+				   match[1] |=currpm[1];
+
+                   R[text_len-j+i][ind]= del[0] & ins[0] & sub[0] & match[0];
+                   R[text_len-j+i][ind+1]= del[1] & ins[1] & sub[1] & match[1];
+                    
+			  }
+			  else
+			  {
+                   del[0]=oldR[0];
+                   del[1]=oldR[1];
+				   ins[0]=shift(R[text_len-j+i][ind-2],R[text_len-j+i][ind-1])[0]; //cross dependency from prev level in graph
+                   ins[1]=shift(R[text_len-j+i][ind-2],R[text_len-j+i][ind-1])[1];
+				   sub[0]=shift(oldR[0],oldR[1])[0];
+                   sub[1]=shift(oldR[0],oldR[1])[1];
+				   match[0]=shift(oldR[0],oldR[1])[0];
+				   match[0] |=currpm[0];
+                   match[1]=shift(oldR[0],oldR[1])[1];
+				   match[1] |=currpm[1];
+
+                   R[text_len-j+i][ind]= del[0] & ins[0] & sub[0] & match[0];
+                   R[text_len-j+i][ind+1]= del[1] & ins[1] & sub[1] & match[1];
+				 
+			  }
+			  }
+
+		  }
   }
   else
   {
 	  std :: cout << "Not supported\n";
   }
-//single you will be storing R values , figure out a way to calculate
-  //This is base code , we can change bindings and reduce memory storage if we are getting an overhead (Design1)
-}}
+  std::  cout << "edit distance to be done\n";
+  
+  }}
