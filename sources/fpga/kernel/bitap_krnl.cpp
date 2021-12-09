@@ -73,6 +73,7 @@ extern "C"
 #pragma HLS BIND_STORAGE variable=patt_len type=RAM_2P impl=BRAM latency=2
 #pragma HLS BIND_STORAGE variable =text_len type=RAM_2P impl=BRAM latency=2
 
+
   for (int i=0;i<num;i++)
 	  patternbitmasks[i]=pm[i];
   patt_len=m[0];
@@ -84,31 +85,89 @@ extern "C"
 
   uint64_t oldR[num*(k+1)];
   int count =num*(k+1);
-  for (int i=0;i<num;i++)
+  for (int i=0;i<count;i++)
 	  oldR[i]=ULLONG_MAX;
 
-  uint64_t R[patt_len][count];
+ uint64_t R[110][25];
+#pragma HLS BIND_OP variable=R op=mul impl=DSP latency=2
+#pragma  HLS BIND_STORAGE variable=P type=RAM_2P impl=BRAM latency=2
+  if (num==1)
+  {
   for (int j=0;j<k+text_len;j++)
 	  for (int i=min(j,k) ;i>=0;i--)
 	  {
 #pragma HLS loop unroll
-//computer R[n-j+1][i]
+//compute R[n-j+1][i]
 		  //get current pattern bit mask
 		  //how do you get for generalised ? , please see cpu for limits and do
-		  if(patt[n-j+1]=='A' or patt[n-j+1]=='a')
+		  uint64_t currpm;
+		  if(tex[text_len-j+i]=='A' or tex[text_len-j+i]=='a')
+		  {
+			  currpm=patternbitmasks[0];
+		  }
+		  else if(tex[text_len-j+i]=='C' or tex[text_len-j+i]=='c')
+		  {
+		  	  currpm=patternbitmasks[1];
+		  }
+		  else if(tex[text_len-j+i]=='G' or tex[text_len-j+i]=='g')
+		  {
+			  currpm=patternbitmasks[2];
+		  }
+		  else if(tex[text_len-j+i]=='T' or tex[text_len-j+i]=='t')
+		  {
+		 	 currpm=patternbitmasks[3];
+		  }
 			  //code to get curr_pr
 		  if(i==0)
 		  {
 			  //compute single R with range
+			  if((text_len-j+i)==text_len-1)
+			  {	  R[text_len-j+i][0]= oldR[0] << 1;
+			      R[text_len+j+i][0]|=currpm;
+			  }
+			  else
+			  {
+				  R[text_len-j+i][0]= R[text_len-j+i+1][0] << 1;
+				  R[text_len-j+i][0]|=currpm;
+			  }
+
 		  }
 		  else
 		  {
 			  //compute all 4 (in parallel by default) and And it
+			  uint64_t sub;
+			  uint64_t ins;
+			  uint64_t match;
+			  uint64_t del;
+			  if (j-i!=1)
+			  {
+				   del=R[text-j+i+1][i-1];
+				   ins=R[text_len-j+i][i-1]<< 1; //cross dependency from prev level in graph
+				   sub=R[text_len-j+i+1][i-1] << 1;
+				   match=R[text_len-j+i+1][i] << 1;
+				   match |=currpm;
+
+			  }
+			  else
+			  {
+				  del=oldR[0];
+				  ins=R[text_len-j+i][i-1] << 1;
+				  sub=oldR[0]<<1;
+				  match=oldR[0]<<1;
+				  match|=currpm;
+			  }
+			  }
+
 		  }
+  }
+  else if (num==2)
+  {
 
-
-	  }
-
+  }
+  else
+  {
+	  std :: cout << "Not supported\n";
+  }
 //single you will be storing R values , figure out a way to calculate
   //This is base code , we can change bindings and reduce memory storage if we are getting an overhead (Design1)
 }}
