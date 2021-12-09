@@ -6,6 +6,7 @@
 #include <iostream>
 #include <inttypes.h>
 #include <unistd.h>
+#include <limits.h>
 #define BUFFER_SIZE 64
 #define DATAWIDTH 512
 #define VECTOR_SIZE (DATAWIDTH / 32) // vector size is 16 (512/32 = 16)
@@ -18,7 +19,7 @@ const unsigned int c_size     = VECTOR_SIZE;
 
 /*
     Bitap kernel implementation
-        
+
         pm (input)          ---> patternbitmasks of pattern
         pattern   (input)     --> query string
         text   (input)     --> text string
@@ -26,17 +27,9 @@ const unsigned int c_size     = VECTOR_SIZE;
         m  (input)       -- > pattern length
         n (input)       ---> text length
         out   (output)    --> Output integer, edit distance
-         
+
    */
   //for shifting two numbers , ie first bit of ind1 should be last bit of ind0
-unsigned long long* shift(unsigned long long number0,unsigned long long number1)
-{
-unsigned long long* out;
-int msb_rightpart=findmsb(number1,63);
-out[1]=number1<<1;
-out[0]=number0<<1+msb_rightpart;
-return out;
-}
 int findmsb(unsigned long long number,int shiftsize)
 {
 unsigned long long mask=1<<shiftsize;
@@ -49,11 +42,28 @@ return 0;
 }
 }
 
+unsigned long long* shift(unsigned long long number0,unsigned long long number1)
+{
+unsigned long long* out;
+int msb_rightpart=findmsb(number1,63);
+out[1]=number1<<1;
+out[0]=number0<<1+msb_rightpart;
+return out;
+}
+
+int min(int a, int b)
+{
+	if(a<b)
+		return a ;
+	return b;
+}
+
+
 extern "C"
 {
     void wide_vadd(
-        unsigned long long  *pm, 
-        const char *pattern, 
+        unsigned long long  *pm,
+        const char *pattern,
         const char *text,
 		int *k,
 		const int *m,
@@ -103,24 +113,20 @@ extern "C"
 	  patternbitmasks[i]=pm[i];
   patt_len=m[0];
   text_len=n[0];
-  for (int i=0;i<patt_len;i++)
-	  patt[i]=pattern[i];
-  for (int i=0;i<text_len;i++)
-  	  tex[i]=text[i];
-
-  uint64_t oldR[num*(k+1)];
-  int count =num*(k+1);
-  for (int i=0;i<count;i++)
-	  oldR[i]=ULLONG_MAX;
+  int offset=k[0];
+  int count =num*(offset+1);
+  uint64_t oldR[2];
+  oldR[0]=ULLONG_MAX;
+  oldR[1]=ULLONG_MAX;
 
  uint64_t R[110][25];
 #pragma HLS BIND_OP variable=R op=mul impl=DSP latency=2
-#pragma  HLS BIND_STORAGE variable=P type=RAM_2P impl=BRAM latency=2
+#pragma  HLS BIND_STORAGE variable=R type=RAM_2P impl=BRAM latency=2
 //bind needs specific value hence specified upper bounds.
-  if (num==1)
+  if (num/4==1)
   {
-  for (int j=0;j<k+text_len;j++)
-	  for (int i=min(j,k) ;i>=0;i--)
+  for (int j=0;j<offset+text_len;j++)
+	  for (int i=min(j,offset) ;i>=0;i--)
 	  {
 #pragma HLS loop unroll
 //compute R[n-j+1][i]
@@ -167,7 +173,7 @@ extern "C"
 			  uint64_t del;
 			  if (j-i!=1)
 			  {
-				   del=R[text-j+i+1][i-1];
+				   del= R[text_len-j+i+1][i-1];
 				   ins=R[text_len-j+i][i-1]<< 1; //cross dependency from prev level in graph
 				   sub=R[text_len-j+i+1][i-1] << 1;
 				   match=R[text_len-j+i+1][i] << 1;
@@ -188,10 +194,10 @@ extern "C"
 
 		  }
   }
-  else if (num==2)
+  else if (num/4==2)
   {
-      for (int j=0;j<k+text_len;j++)
-	  for (int i=min(j,k) ;i>=0;i--)
+      for (int j=0;j<offset+text_len;j++)
+	  for (int i=min(j,offset) ;i>=0;i--)
 	  {
 #pragma HLS loop unroll
 //compute R[n-j+1][i]
@@ -247,8 +253,8 @@ extern "C"
 			  uint64_t del[2];
 			  if (j-i!=1)
 			  {
-				   del[0]=R[text-j+i+1][ind-2];
-                   del[1]=R[text-j+i+1][ind-1];
+				   del[0]=R[text_len-j+i+1][ind-2];
+                   del[1]=R[text_len-j+i+1][ind-1];
 				   ins[0]=shift(R[text_len-j+i][ind-2],R[text_len-j+i][ind-1])[0]; //cross dependency from prev level in graph
                    ins[1]=shift(R[text_len-j+i][ind-2],R[text_len-j+i][ind-1])[1];
 				   sub[0]=shift(R[text_len-j+i+1][ind-2],R[text_len-j+i+1][ind-1])[0];
@@ -260,7 +266,7 @@ extern "C"
 
                    R[text_len-j+i][ind]= del[0] & ins[0] & sub[0] & match[0];
                    R[text_len-j+i][ind+1]= del[1] & ins[1] & sub[1] & match[1];
-                    
+
 			  }
 			  else
 			  {
@@ -277,7 +283,7 @@ extern "C"
 
                    R[text_len-j+i][ind]= del[0] & ins[0] & sub[0] & match[0];
                    R[text_len-j+i][ind+1]= del[1] & ins[1] & sub[1] & match[1];
-				 
+
 			  }
 			  }
 
@@ -285,8 +291,8 @@ extern "C"
   }
   else
   {
-	  std :: cout << "Not supported\n";
+	  std :: cout << "Not supported since value of num is " << num/4 << "\n";
   }
   std::  cout << "edit distance to be done\n";
-  
+
   }}
