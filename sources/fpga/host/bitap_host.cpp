@@ -291,7 +291,7 @@ int main(int argc, char * argv[])
     int len = 4*count;
 
   
-
+    std::cout << "started mapping buffers\n";
     //for (int i=0;i<=len(patternBitmasks);i++)
     //std::cout << patternBitmasks[1] << "\n";
 
@@ -380,7 +380,7 @@ int main(int argc, char * argv[])
                                                         sizeof(int));
     et.finish();
    //Initialise pattern bitmasks
-   //std::cout << "Generating Pattern bit masks\n";
+    std::cout << "Generating Pattern bit masks\n";
     et.add("generating pattern bitmasks");
     unsigned long long *patternmask = generatePatternBitmasksACGT(argv[2], m);
 //    patternBitmasks[0]=patternBitmask[0];
@@ -410,16 +410,17 @@ int main(int argc, char * argv[])
 	et.add("cpu time");
     std::cout << "CPU result"  << "\n";
     out_put = genasm_filter(text,pat,k[0]);
-    //std::  cout << out_put << "\n";
+    std::  cout << out_put << "\n";
     et.finish();
      // Send the buffers down to the  card
+    std::cout<< "Sending buffers\n";
     et.add("Memory object migration enqueue");
     cl::Event event_sp;
     q.enqueueMigrateMemObjects({buffer_pm, buffer_pattern, buffer_text,buffer_k, buffer_m, buffer_n}, 0, NULL, &event_sp);
     clWaitForEvents(1, (const cl_event *)&event_sp);
 
     et.add("OCL Enqueue task");
-
+    std::cout <<"starting kernel\n";
     q.enqueueTask(krnl, NULL, &event_sp);
     et.add("Wait for kernel to complete");
     clWaitForEvents(1, (const cl_event *)&event_sp);
