@@ -150,7 +150,6 @@ F[1]=shift(F[0],F[1])[1];
 #pragma HLS loop unroll
 //compute R[n-j+1][i]
 		  //get current pattern bit mask
-		  //how do you get for generalised ? , please see cpu for limits and do
 		  uint64_t currpm;
 		  int iter = text_len-j+i;
 		  if (iter<0 or i<0)
@@ -173,12 +172,7 @@ F[1]=shift(F[0],F[1])[1];
 		  {
 		 	 currpm=patternbitmasks[3];
 		  }
-			  //code to get curr_pr
-//		  std::cout << "text pos "<< iter<<"for j at"<< j << "for i at "<< i<<"\n";
-//		  std::cout << "currpm is " << currpm << "\n";
-//		  std::cout << "text" << tex[iter]<<" -----------------at --------------"<< iter <<"\n";
-//		  //std::cout << "pattern bit mask"<< patternbitmasks[0]<<"\n";
-//		  std::cout << "the tuple is("<< iter << ","<< i <<")\n";
+
 		  if(i==0)
 		  {
 			  //compute single R with range
